@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>MQTT Frontend - ESP32</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f1f5f9;
+      margin: 0;
+      padding: 20px;
+      color: #111827;
+    }
+
+    h1, h2 {
+      color: #1d4ed8;
+    }
+
+    label {
+      display: block;
+      margin: 10px 0 5px;
+      font-weight: bold;
+    }
+
+    input[type="text"] {
+      padding: 8px;
+      width: 100%;
+      max-width: 300px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    button {
+      background-color: #1d4ed8;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-bottom: 20px;
+    }
+
+    button:hover {
+      background-color: #2563eb;
+    }
+
+    #status {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    table {
+      width: 100%;
+      max-width: 800px;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 8px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #e2e8f0;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+    
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  th {
+    background-color: #e9eef4;
+    font-weight: bold;
+  }
+
+  td:first-child {
+    font-size: 0.85em;
+    white-space: nowrap;
+    max-width: 150px;
+  }
+
+  td {
+    word-wrap: break-word;
+    max-width: 200px;
+  }
+
+  tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+  </style>
+</head>
+<body>
+
+  <h1>Cliente MQTT (ESP32)</h1>
+
+  <label for="topicInput">Topic:</label>
+  <input type="text" id="topicInput" placeholder="/Leon" />
+
+  <button onclick="connectMQTT()">Conectar</button>
+  <button onclick="disconnectMQTT()">Desconectar</button>
+
+  <div id="status">Esperando conexión...</div>
+
+  <h2>Mensajes recibidos:</h2>
+  <table id="dataTable">
+    <thead>
+      <tr id="tableHeader">
+        <!-- Encabezados dinámicos -->
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      <!-- Datos recibidos -->
+    </tbody>
+  </table>
+
+    <script>
+  let client = null;
+  let connected = false;
+  let columns = [];
+  let messageId = 1;
+
+  function connectMQTT() {
+    const topic = document.getElementById('topicInput').value.trim() || '/Leon';
+
+    if (connected && client) {
+      client.end();
+    }
+
+    const broker = 'wss://test.mosquitto.org:8081';
+    client = mqtt.connect(broker);
+
+    document.getElementById('status').textContent = `Conectando al topic: ${topic}...`;
+
+    client.on('connect', () => {
+      client.subscribe(topic, (err) => {
+        if (err) {
+          document.getElementById('status').textContent = '❌ Error al suscribirse al topic.';
+        } else {
+          connected = true;
+          document.getElementById('status').textContent = `✅ Conectado y suscrito al topic: ${topic}`;
+        }
+      });
+    });
+
+    client.on('message', (topic, message) => {
+      try {
+        const json = JSON.parse(message.toString());
+        appendToTable(json);
+      } catch (err) {
+        console.error('JSON inválido:', message.toString());
+      }
+    });
+
+    client.on('error', (err) => {
+      console.error('MQTT Error:', err);
+      document.getElementById('status').textContent = '❌ Error en la conexión MQTT.';
+    });
+  }
+
+  function disconnectMQTT() {
+    if (client && connected) {
+      client.end();
+      connected = false;
+      document.getElementById('status').textContent = '🔌 Desconectado del broker.';
+    }
+  }
+
+  function appendToTable(data) {
+    const tableBody = document.getElementById('tableBody');
+    const headerRow = document.getElementById('tableHeader');
+
+    // Detectar nuevas claves
+    const newKeys = Object.keys(data).filter(key => !columns.includes(key));
+    if (newKeys.length > 0) {
+      columns.push(...newKeys);
+
+      // Actualizar encabezado (con columna fija de ID/fecha/hora)
+      headerRow.innerHTML = '';
+      const thFixed = document.createElement('th');
+      thFixed.textContent = 'ID / Fecha-Hora';
+      headerRow.appendChild(thFixed);
+
+      columns.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col;
+        headerRow.appendChild(th);
+      });
+
+      // Agregar celdas vacías a filas anteriores
+      Array.from(tableBody.rows).forEach(row => {
+        while (row.cells.length < columns.length + 1) {
+          const td = document.createElement('td');
+          td.textContent = '';
+          row.appendChild(td);
+        }
+      });
+    }
+
+    // Crear nueva fila
+    const row = document.createElement('tr');
+    
+    // Columna de ID + fecha + hora
+    const now = new Date();
+    const dateStr = now.toLocaleDateString();
+    const timeStr = now.toLocaleTimeString();
+    const tdFixed = document.createElement('td');
+    tdFixed.innerHTML = `<strong>${messageId++}</strong><br>${dateStr}<br>${timeStr}`;
+    row.appendChild(tdFixed);
+
+    // Resto de columnas
+    columns.forEach(col => {
+      const td = document.createElement('td');
+      td.textContent = data[col] !== undefined ? data[col] : '';
+      row.appendChild(td);
+    });
+
+    // Insertar al principio
+    tableBody.insertBefore(row, tableBody.firstChild);
+  }
+</script>
+
+
+
+</body>
+</html>
