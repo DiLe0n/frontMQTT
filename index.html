@@ -334,7 +334,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>Visualizacion de datos</h1>
+      <h1>Interfaz de monitoreo</h1>
     </header>
 
     <div class="control-panel">
@@ -353,7 +353,7 @@
 
       <div class="form-group">
         <label for="topicInput">Topic:</label>
-        <input type="text" id="topicInput" placeholder="/Leon" value="/Leon" />
+        <input type="text" id="topicInput" placeholder="/Leon2" value="/Leon2" />
       </div>
 
       <div class="status" id="connectionStatus">
@@ -370,13 +370,19 @@
         <button class="secondary" onclick="mqttClient.clearMessages()">
           🗑️ Limpiar mensajes
         </button>
+        <button id="startAlarmBtn" onclick="mqttClient.sendStartAlarm()" disabled style="background-color: #10b981; margin-left: 15px;">
+          🟢 START ALARM
+        </button>
+        <button id="resetAlarmBtn" onclick="mqttClient.sendResetAlarm()" disabled style="background-color: #dc2626;">
+          🚨 RESET ALARM
+        </button>
       </div>
     </div>
 
     <div class="cards-container">
       <div class="card">
         <div class="card-header">
-          <h3>Mensajes JSON</h3>
+          <h3>Actualización de estado</h3>
           <div class="actions">
             <span class="badge" id="jsonCount">0</span>
             <button class="secondary" onclick="mqttClient.exportJson()">📤 Exportar</button>
@@ -447,6 +453,8 @@
       let jsonMessageCount = 0;
       let nonJsonMessageCount = 0;
       let maxMessages = 100;
+      let alarmState = false; // Track alarm state: false = OFF, true = ON
+      const defaultTopic = '/Leon2'; // Default topic
       
       // DOM elements cache
       const elements = {
@@ -458,6 +466,8 @@
         connectionStatus: document.getElementById('connectionStatus'),
         connectBtn: document.getElementById('connectBtn'),
         disconnectBtn: document.getElementById('disconnectBtn'),
+        startAlarmBtn: document.getElementById('startAlarmBtn'),
+        resetAlarmBtn: document.getElementById('resetAlarmBtn'),
         tableHeader: document.getElementById('tableHeader'),
         tableBody: document.getElementById('tableBody'),
         emptyTableMessage: document.getElementById('emptyTableMessage'),
@@ -476,8 +486,12 @@
         });
 
         elements.topicInput.addEventListener('input', function() {
-          elements.publishTopic.placeholder = this.value || '/Leon';
+          elements.publishTopic.placeholder = this.value || defaultTopic;
         });
+
+        // Set default topic
+        elements.topicInput.value = defaultTopic;
+        elements.publishTopic.placeholder = defaultTopic;
 
         // Initialize message content with sample JSON
         elements.messageContent.value = JSON.stringify({
@@ -536,6 +550,8 @@
         // Update connect/disconnect buttons
         elements.connectBtn.disabled = connected;
         elements.disconnectBtn.disabled = !connected;
+        elements.startAlarmBtn.disabled = !connected;
+        elements.resetAlarmBtn.disabled = !connected;
       }
 
       // Connect to MQTT broker
@@ -544,7 +560,7 @@
           ? elements.customBrokerUrl.value 
           : elements.brokerSelect.value;
           
-        const topic = elements.topicInput.value.trim() || '/Leon';
+        const topic = elements.topicInput.value.trim() || defaultTopic;
         
         if (!brokerUrl) {
           showToast('Por favor, proporciona una URL de broker válida', 'error');
@@ -620,6 +636,12 @@
       function updateConnectionStatus(status, message) {
         elements.connectionStatus.className = `status ${status}`;
         elements.connectionStatus.textContent = message;
+        
+        // Update button states
+        elements.connectBtn.disabled = connected;
+        elements.disconnectBtn.disabled = !connected;
+        elements.startAlarmBtn.disabled = !connected;
+        elements.resetAlarmBtn.disabled = !connected;
       }
 
       // Add message to table
@@ -729,7 +751,7 @@
           return;
         }
         
-        const topic = elements.publishTopic.value.trim() || elements.topicInput.value.trim() || '/Leon';
+        const topic = elements.publishTopic.value.trim() || elements.topicInput.value.trim() || defaultTopic;
         const messageType = elements.messageType.value;
         const content = elements.messageContent.value;
         
@@ -793,6 +815,56 @@
         showToast('Datos exportados correctamente', 'success');
       }
 
+      // Send START_ALARM command
+      function sendStartAlarm() {
+        if (!connected || !client) {
+          showToast('No conectado al broker MQTT', 'error');
+          return;
+        }
+        
+        const topic = elements.topicInput.value.trim() || defaultTopic;
+        const startMessage = "START_ALARM";
+        
+        try {
+          client.publish(topic, startMessage);
+          showToast(`Comando START_ALARM enviado a ${topic}`, 'success');
+          
+          // Optional: Log the action in the non-JSON messages area
+          appendNonJson(`[ENVIADO] ${startMessage}`);
+          nonJsonMessageCount++;
+          updateUI();
+          
+        } catch (error) {
+          console.error('Start alarm error:', error);
+          showToast('Error al enviar comando START_ALARM', 'error');
+        }
+      }
+
+      // Send RESET_ALARM command
+      function sendResetAlarm() {
+        if (!connected || !client) {
+          showToast('No conectado al broker MQTT', 'error');
+          return;
+        }
+        
+        const topic = elements.topicInput.value.trim() || defaultTopic;
+        const resetMessage = "RESET_ALARM";
+        
+        try {
+          client.publish(topic, resetMessage);
+          showToast(`Comando RESET_ALARM enviado a ${topic}`, 'success');
+          
+          // Optional: Log the action in the non-JSON messages area
+          appendNonJson(`[ENVIADO] ${resetMessage}`);
+          nonJsonMessageCount++;
+          updateUI();
+          
+        } catch (error) {
+          console.error('Reset alarm error:', error);
+          showToast('Error al enviar comando RESET_ALARM', 'error');
+        }
+      }
+
       // Format helpers
       function formatTime(date) {
         return date.toLocaleTimeString();
@@ -829,7 +901,9 @@
         clearMessages,
         clearNonJsonMessages,
         publishMessage,
-        exportJson
+        exportJson,
+        sendStartAlarm,
+        sendResetAlarm
       };
     })();
 
@@ -838,7 +912,7 @@
       mqttClient.init();
       // Auto-connect to /Leon topic after a short delay to ensure DOM is fully initialized
       setTimeout(() => {
-        document.getElementById('topicInput').value = '/Leon'; // Ensure topic is set
+        document.getElementById('topicInput').value = '/Leon2'; // Ensure topic is set
         mqttClient.connect();
       }, 500);
     });
