@@ -228,6 +228,10 @@
       overflow-x: auto;
     }
 
+    .table-row-hidden {
+      display: none;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -464,6 +468,7 @@
           <h3>Actualización de estado</h3>
           <div class="actions">
             <span class="badge" id="jsonCount">0</span>
+            <button class="secondary" id="toggleRowsBtn" onclick="mqttClient.toggleTableRows()">👁️ Ver todos</button>
             <button class="secondary" onclick="mqttClient.exportJson()">📤 Exportar</button>
           </div>
         </div>
@@ -471,7 +476,7 @@
           <table id="dataTable">
             <thead>
               <tr id="tableHeader">
-                <th>ID / Fecha-Hora</th>
+                <th>ID</th>
               </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -511,7 +516,7 @@
         </div>
         <div class="form-group">
           <label for="messageContent">Contenido:</label>
-          <textarea id="messageContent" placeholder='{"sensor": "temperature", "value": 25.4}'></textarea>
+          <textarea id="messageContent" placeholder='{"module": "Interfaz de Usuario", "status": "OK"}'></textarea>
         </div>
         <div class="text-right">
           <button onclick="mqttClient.publishMessage()">📤 Publicar</button>
@@ -534,6 +539,8 @@
       let maxMessages = 100;
       let alarmState = false;
       let moduleStatuses = new Map(); // Store module statuses
+      let showAllRows = false;
+      const maxVisibleRows = 5;
       const defaultTopic = '/Leon2';
       
       // DOM elements cache
@@ -576,25 +583,21 @@
 
         // Initialize message content with sample JSON
         elements.messageContent.value = JSON.stringify({
-          sensor: "temperature",
-          value: 25.4,
-          unit: "C",
-          deviceId: "esp32-demo"
+          module: "Interfaz de Usuario",
+          status: "OK"
         }, null, 2);
 
         elements.messageType.addEventListener('change', function() {
           if (this.value === 'json') {
-            elements.messageContent.placeholder = '{"sensor": "temperature", "value": 25.4}';
+            elements.messageContent.placeholder = '{"module": "Interfaz de Usuario", "status": "OK"}';
             try {
               const currentValue = elements.messageContent.value;
               JSON.parse(currentValue);
               elements.messageContent.value = JSON.stringify(JSON.parse(currentValue), null, 2);
             } catch (e) {
               elements.messageContent.value = JSON.stringify({
-                sensor: "temperature",
-                value: 25.4,
-                unit: "C",
-                deviceId: "esp32-demo"
+                module: "Interfaz de Usuario",
+                status: "OK"
               }, null, 2);
             }
           } else {
@@ -695,6 +698,26 @@
       // UI state management
       function updateUI() {
         const hasJsonMessages = elements.tableBody.children.length > 0;
+        const rows = Array.from(elements.tableBody.children);
+        const toggleBtn = document.getElementById('toggleRowsBtn');
+
+        if (rows.length > maxVisibleRows && !showAllRows) {
+          rows.forEach((row, index) => {
+            if (index >= maxVisibleRows) {
+              row.classList.add('table-row-hidden');
+            }
+          });
+          if (toggleBtn) {
+            toggleBtn.style.display = 'inline-flex';
+            toggleBtn.innerHTML = '👁️ Ver todos';
+          }
+        } else if (rows.length <= maxVisibleRows) {
+          if (toggleBtn) {
+            toggleBtn.style.display = 'none';
+          }
+        } else if (showAllRows && toggleBtn) {
+          toggleBtn.innerHTML = '👁️ Ver menos';
+        }
         const hasNonJsonMessages = elements.nonJsonList.children.length > 0;
         
         elements.emptyTableMessage.style.display = hasJsonMessages ? 'none' : 'block';
@@ -742,6 +765,18 @@
                 connected = true;
                 updateConnectionStatus('connected', `✅ Conectado y suscrito al topic: ${topic}`);
                 showToast(`Conectado exitosamente a ${topic}`, 'success');
+                // Enviar mensaje automático de estado de la interfaz
+                const interfaceStatusMessage = {
+                  module: "Interfaz de Usuario",
+                  status: "OK"
+                };
+                
+                try {
+                  client.publish(topic, JSON.stringify(interfaceStatusMessage));
+                  console.log('Mensaje de estado de interfaz enviado automáticamente');
+                } catch (error) {
+                  console.error('Error al enviar mensaje automático:', error);
+                }
                 updateUI();
               }
             });
@@ -837,7 +872,7 @@
         const now = new Date();
         const tdTime = document.createElement('td');
         tdTime.className = 'timestamp';
-        tdTime.innerHTML = `<strong>#${messageId++}</strong><br>${formatDateTime(now)}`;
+        tdTime.innerHTML = `<strong>#${messageId++}</strong>`;
         row.appendChild(tdTime);
         
         // Add data cells
@@ -1056,6 +1091,31 @@
         }, 3000);
       }
 
+      function toggleTableRows() {
+        const rows = Array.from(elements.tableBody.children);
+        const toggleBtn = document.getElementById('toggleRowsBtn');
+        
+        showAllRows = !showAllRows;
+        
+        if (showAllRows) {
+          // Show all rows
+          rows.forEach(row => {
+            row.classList.remove('table-row-hidden');
+          });
+          toggleBtn.innerHTML = '👁️ Ver menos';
+        } else {
+          // Hide rows beyond maxVisibleRows
+          rows.forEach((row, index) => {
+            if (index >= maxVisibleRows) {
+              row.classList.add('table-row-hidden');
+            } else {
+              row.classList.remove('table-row-hidden');
+            }
+          });
+          toggleBtn.innerHTML = '👁️ Ver todos';
+        }
+      }
+
       // Return public methods
       return {
         init,
@@ -1067,7 +1127,8 @@
         publishMessage,
         exportJson,
         sendStartAlarm,
-        sendResetAlarm
+        sendResetAlarm,
+        toggleTableRows
       };
     })();
 
