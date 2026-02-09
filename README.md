@@ -92,3 +92,27 @@ frontMQTT/
 
 ---
 
+
+## 🤝 Contribución
+
+### ¡Tu ayuda es bienvenida para hacer este Gateway más robusto!
+
+1. **Haz un Fork del repositorio.**
+
+2. **Crea tu rama (git checkout -b feature/MejoraSeguridad).**
+
+3. **Haz Commit de tus cambios.**
+
+4. **Haz Push a la rama.**
+
+5. **Abre un Pull Request.**
+
+---
+
+## 📝 Licencia
+
+```
+Este proyecto está bajo la licencia ISC. Siéntete libre de usarlo y adaptarlo a tu infraestructura.
+```
+
+---
